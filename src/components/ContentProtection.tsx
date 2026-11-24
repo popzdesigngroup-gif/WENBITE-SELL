@@ -6,9 +6,10 @@ export function ContentProtection() {
   const [showWarning, setShowWarning] = useState(false);
   const [warningText, setWarningText] = useState("");
   const [isShieldActive, setIsShieldActive] = useState(false);
+  const [screenProtectBlocked, setScreenProtectBlocked] = useState(false);
   const shieldTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
-  const activateBlackoutShield = (reason: string, durationMs: number = 2000) => {
+  const activateBlackoutShield = (reason: string, durationMs: number = 3000) => {
     setIsShieldActive(true);
     setWarningText(reason);
     setShowWarning(true);
@@ -24,13 +25,23 @@ export function ContentProtection() {
   };
 
   useEffect(() => {
-    // 1. Context Menu (Right Click)
+    // 1. Screen Capture API Interceptor (getDisplayMedia detection)
+    if (navigator.mediaDevices && navigator.mediaDevices.getDisplayMedia) {
+      const originalGetDisplayMedia = navigator.mediaDevices.getDisplayMedia.bind(navigator.mediaDevices);
+      navigator.mediaDevices.getDisplayMedia = async function (...args) {
+        setScreenProtectBlocked(true);
+        activateBlackoutShield("Screen recording detected and disabled.", 5000);
+        throw new DOMException("Screen capture is prohibited on this website.", "NotAllowedError");
+      };
+    }
+
+    // 2. Right-Click / Context Menu
     const handleContextMenu = (e: MouseEvent) => {
       e.preventDefault();
       activateBlackoutShield("Right-click & asset inspection disabled.");
     };
 
-    // 2. Prevent Copy & Cut
+    // 3. Prevent Copy & Cut
     const handleCopy = (e: ClipboardEvent) => {
       e.preventDefault();
       activateBlackoutShield("Content copying is strictly restricted.");
@@ -41,78 +52,24 @@ export function ContentProtection() {
       activateBlackoutShield("Content extraction restricted.");
     };
 
-    // 3. Prohibit Dragging of media
+    // 4. Prohibit Dragging of any elements
     const handleDragStart = (e: DragEvent) => {
       e.preventDefault();
       return false;
     };
 
-    // 4. Keyboard Interceptors for Screenshots
-    const handleKeyDown = (e: KeyboardEvent) => {
-      // PrintScreen key (Windows / Linux)
-      if (e.key === "PrintScreen" || e.code === "PrintScreen") {
-        e.preventDefault();
-        activateBlackoutShield("Screen capture is prohibited.", 3000);
-        return;
-      }
-
-      // Mac screenshot combinations: Command + Shift + 3 / 4 / 5 / 6
-      if (
-        (e.metaKey && e.shiftKey) ||
-        (e.ctrlKey && e.shiftKey)
-      ) {
-        if (["3", "4", "5", "6", "s", "S"].includes(e.key)) {
-          e.preventDefault();
-          activateBlackoutShield("Screenshot shortcut detected. Display shielded.", 3500);
-          return;
-        }
-      }
-
-      // Windows Snipping Tool (Win + Shift + S) or Alt + PrintScreen
-      if (e.key === "Meta" || e.key === "OS" || e.code.includes("Meta")) {
-        // Prepare shield if Meta is pressed with Shift
-        if (e.shiftKey) {
-          activateBlackoutShield("Screen capture shortcut detected.", 3500);
-          return;
-        }
-      }
-
-      // Ctrl+P / Cmd+P (Print to PDF / Print Dialog)
-      if ((e.ctrlKey || e.metaKey) && (e.key.toLowerCase() === "p" || e.code === "KeyP")) {
-        e.preventDefault();
-        activateBlackoutShield("Printing and PDF export are disabled.", 2500);
-        return;
-      }
-
-      // Ctrl+S / Cmd+S (Save Page)
-      if ((e.ctrlKey || e.metaKey) && (e.key.toLowerCase() === "s" || e.code === "KeyS")) {
-        e.preventDefault();
-        activateBlackoutShield("Saving webpage files is restricted.", 2000);
-        return;
-      }
-
-      // F12 or Inspect shortcuts
-      if (
-        e.key === "F12" ||
-        ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key.toLowerCase() === "i" || e.code === "KeyI")) ||
-        ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key.toLowerCase() === "c" || e.code === "KeyC")) ||
-        ((e.ctrlKey || e.metaKey) && (e.key.toLowerCase() === "u" || e.code === "KeyU"))
-      ) {
-        e.preventDefault();
-        activateBlackoutShield("Developer inspection tools are disabled.", 2500);
-        return;
-      }
-    };
-
-    // 5. Window Blur / Defocus Shielding (Snipping tools / macOS screenshot overlays steal focus)
+    // 5. Aggressive Window Blur / Window Defocus
+    // System recorders (macOS QuickTime, Screen Record toolbar, OBS, Chrome screen share) 
+    // cause the browser tab to immediately lose active focus.
     const handleWindowBlur = () => {
-      // Whenever external capture tool activates, window loses focus -> instantly blackout
       setIsShieldActive(true);
     };
 
     const handleWindowFocus = () => {
-      // Restore when user returns
-      setIsShieldActive(false);
+      // Delay unshield slightly to catch frame-grabbing snippers
+      setTimeout(() => {
+        setIsShieldActive(false);
+      }, 300);
     };
 
     const handleVisibilityChange = () => {
@@ -120,6 +77,45 @@ export function ContentProtection() {
         setIsShieldActive(true);
       } else {
         setIsShieldActive(false);
+      }
+    };
+
+    // 6. Keyboard Interceptors for Shortcuts (macOS Cmd+Shift+5 is QuickTime/Screen Record)
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // PrintScreen key
+      if (e.key === "PrintScreen" || e.code === "PrintScreen") {
+        e.preventDefault();
+        activateBlackoutShield("Screen capture is prohibited.", 4000);
+        return;
+      }
+
+      // macOS Screen Recording / Screenshot shortcuts: Cmd+Shift+3, Cmd+Shift+4, Cmd+Shift+5
+      if ((e.metaKey && e.shiftKey) || (e.ctrlKey && e.shiftKey)) {
+        if (["3", "4", "5", "6", "s", "S"].includes(e.key)) {
+          e.preventDefault();
+          activateBlackoutShield("Screen recording shortcut detected. Display shielded.", 5000);
+          return;
+        }
+      }
+
+      // Windows Game Bar Record (Win + Alt + R)
+      if (e.altKey && (e.key.toLowerCase() === "r" || e.code === "KeyR")) {
+        activateBlackoutShield("Recording shortcut detected.", 4000);
+        return;
+      }
+
+      // Print / PDF
+      if ((e.ctrlKey || e.metaKey) && (e.key.toLowerCase() === "p" || e.code === "KeyP")) {
+        e.preventDefault();
+        activateBlackoutShield("Printing and PDF export are disabled.", 3000);
+        return;
+      }
+
+      // Save page
+      if ((e.ctrlKey || e.metaKey) && (e.key.toLowerCase() === "s" || e.code === "KeyS")) {
+        e.preventDefault();
+        activateBlackoutShield("Webpage file saving is restricted.", 3000);
+        return;
       }
     };
 
@@ -149,38 +145,41 @@ export function ContentProtection() {
 
   return (
     <>
-      {/* 1. Dynamic Blackout Shield Layer */}
+      {/* 1. Permanent Video Dynamic Protection Canvas Overlay (Renders continuous anti-piracy grid) */}
+      <div className="fixed inset-0 pointer-events-none z-[99990] overflow-hidden select-none opacity-20">
+        <div className="absolute inset-0 flex flex-wrap items-center justify-around gap-24 p-8 transform -rotate-12 scale-125">
+          {Array.from({ length: 48 }).map((_, i) => (
+            <div key={i} className="text-[11px] font-black tracking-widest text-white/40 whitespace-nowrap">
+              VIPER.AI SECURE MASTER • PROTECTED CONTENT • DO NOT RECORD
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* 2. Full Blackout Shield (Engages during recording attempts / defocus / shortcuts) */}
       <div
-        className={`fixed inset-0 z-[999999] bg-[#090a0f] flex flex-col items-center justify-center p-6 text-center transition-opacity duration-75 pointer-events-none select-none ${
-          isShieldActive ? "opacity-100 visible" : "opacity-0 invisible"
+        className={`fixed inset-0 z-[999999] bg-[#050507] flex flex-col items-center justify-center p-6 text-center transition-all duration-75 select-none ${
+          isShieldActive || screenProtectBlocked
+            ? "opacity-100 visible pointer-events-auto"
+            : "opacity-0 invisible pointer-events-none"
         }`}
       >
-        <div className="w-16 h-16 rounded-2xl bg-red-500/10 border border-red-500/30 flex items-center justify-center text-red-400 mb-4 animate-pulse">
-          <svg
-            className="w-8 h-8"
-            fill="none"
-            viewBox="0 0 24 24"
-            stroke="currentColor"
-            strokeWidth={2}
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
-            />
+        <div className="w-20 h-20 rounded-3xl bg-red-500/10 border border-red-500/40 flex items-center justify-center text-red-400 mb-5 shadow-2xl shadow-red-500/20 animate-pulse">
+          <svg className="w-10 h-10" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
           </svg>
         </div>
-        <h2 className="text-xl font-bold text-white tracking-wide">
-          Protected Content
+        <h2 className="text-2xl font-black text-white tracking-wider uppercase">
+          Recording & Capture Blocked
         </h2>
-        <p className="text-sm text-gray-400 max-w-md mt-2">
-          Screenshots, recording, and media captures are strictly blocked to protect proprietary 4K AI video masters.
+        <p className="text-sm text-gray-400 max-w-lg mt-3 leading-relaxed">
+          Screen recording, screen mirroring, and frame captures are prohibited under digital asset rights. Uncompressed 4K master files are only released upon licensed purchase.
         </p>
       </div>
 
-      {/* 2. Floating Warning Toast */}
+      {/* 3. Floating Alert Toast */}
       {showWarning && (
-        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[1000000] px-5 py-3 rounded-2xl bg-[#11131a]/95 border border-red-500/50 text-white shadow-2xl backdrop-blur-xl flex items-center gap-3 animate-in fade-in slide-in-from-bottom-4 duration-150">
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[1000000] px-5 py-3 rounded-2xl bg-[#11131a]/95 border border-red-500/50 text-white shadow-2xl backdrop-blur-xl flex items-center gap-3">
           <div className="w-2.5 h-2.5 rounded-full bg-red-500 animate-ping" />
           <span className="text-xs font-semibold text-gray-200 tracking-wide">
             {warningText}
