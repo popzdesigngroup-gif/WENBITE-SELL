@@ -1,26 +1,102 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
-
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
+@layer base {
   :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+    --background: #090a0f;
+    --foreground: #f3f4f6;
+    --card: #11131a;
+    --card-foreground: #f3f4f6;
+    --primary: #10b981;
+    --primary-foreground: #000000;
+    --accent: #6366f1;
+    --muted: #1e2230;
+    --muted-foreground: #9ca3af;
+    --border: #232738;
+  }
+}
+
+/* ========================================================= */
+/* CONTENT PROTECTION & ANTI-COPY / ANTI-SCREENSHOT STYLES  */
+/* ========================================================= */
+
+/* 1. Global selection & drag prohibition */
+*, *::before, *::after {
+  -webkit-user-select: none !important;
+  -moz-user-select: none !important;
+  -ms-user-select: none !important;
+  user-select: none !important;
+  -webkit-touch-callout: none !important;
+}
+
+input, textarea {
+  -webkit-user-select: text !important;
+  -moz-user-select: text !important;
+  -ms-user-select: text !important;
+  user-select: text !important;
+}
+
+img, video {
+  -webkit-user-drag: none !important;
+  -khtml-user-drag: none !important;
+  -moz-user-drag: none !important;
+  -o-user-drag: none !important;
+  user-drag: none !important;
+}
+
+/* 2. Hardware Canvas Overlay Watermarking Pattern */
+.protected-watermark-grid {
+  position: relative;
+}
+
+.protected-watermark-grid::after {
+  content: "VIPER.AI SECURE PREVIEW • LICENSED ASSET • DO NOT CAPTURE";
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.15em;
+  color: rgba(255, 255, 255, 0.08);
+  pointer-events: none;
+  transform: rotate(-15deg);
+  z-index: 10;
+  white-space: nowrap;
+}
+
+/* 3. Anti-Print & PDF Export Block */
+@media print {
+  html, body {
+    display: none !important;
+    visibility: hidden !important;
   }
 }
 
 body {
-  background: var(--background);
+  background-color: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-feature-settings: "rlig" 1, "calt" 1;
+  overflow-x: hidden;
+}
+
+/* Custom glowing & cyberpunk effects */
+.glow-emerald {
+  box-shadow: 0 0 35px -5px rgba(16, 185, 129, 0.35);
+}
+
+.glow-indigo {
+  box-shadow: 0 0 35px -5px rgba(99, 102, 241, 0.35);
+}
+
+.glow-card:hover {
+  box-shadow: 0 10px 30px -10px rgba(16, 185, 129, 0.25);
+  border-color: rgba(16, 185, 129, 0.4);
+}
+
+.glass-panel {
+  background: rgba(17, 19, 26, 0.75);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
 }
